@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Dashboard executivo de monitoramento de aulas síncronas." />
+  <title>ConsultaEDU | Monitoramento de Aulas</title>
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-card">
+      <div class="brand-mark loading-mark">CE</div>
+      <div>
+        <strong>ConsultaEDU</strong>
+        <p>Carregando dados do Monitor Meet...</p>
+      </div>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">CE</div>
+        <div class="brand-copy">
+          <strong>ConsultaEDU</strong>
+          <span>Monitor Meet</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-scroll="visaoGeral">
+          <span class="nav-icon">▦</span>
+          <span>Visão geral</span>
+        </button>
+
+        <button class="nav-item" data-scroll="graficos">
+          <span class="nav-icon">⌁</span>
+          <span>Análises</span>
+        </button>
+
+        <button class="nav-item" data-scroll="atencao">
+          <span class="nav-icon">!</span>
+          <span>Atenção</span>
+        </button>
+
+        <button class="nav-item" data-scroll="detalhamento">
+          <span class="nav-icon">≡</span>
+          <span>Detalhamento</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="api-status">
+          <span id="apiStatusDot" class="status-dot"></span>
+          <div>
+            <strong id="apiStatusText">Verificando API</strong>
+            <span id="apiUpdatedAt">—</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <button id="menuButton" class="icon-button mobile-only" aria-label="Abrir menu">☰</button>
+
+          <div>
+            <div class="eyebrow">RELATÓRIO GERENCIAL</div>
+            <h1>Monitoramento de Aulas Síncronas</h1>
+            <p id="subtitle">Consolidação das aulas acompanhadas pelo Google Meet</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="view-switch" title="Alternar modo de visualização">
+            <button id="executiveViewBtn" class="view-switch-btn active">Executiva</button>
+            <button id="operationalViewBtn" class="view-switch-btn">Operacional</button>
+          </div>
+
+          <button id="refreshButton" class="button secondary">
+            <span>↻</span>
+            Atualizar
+          </button>
+
+          <button id="printButton" class="button primary">
+            <span>⇩</span>
+            PDF / Imprimir
+          </button>
+        </div>
+      </header>
+
+      <section class="filter-panel no-print">
+        <div class="filter-heading">
+          <div>
+            <span class="section-kicker">FILTROS</span>
+            <strong>Refine a visualização</strong>
+          </div>
+
+          <button id="clearFiltersButton" class="text-button">Limpar filtros</button>
+        </div>
+
+        <div class="filters-grid">
+          <label class="filter-field">
+            <span>Semana</span>
+            <select id="filterWeek">
+              <option value="">Todas as semanas</option>
+            </select>
+          </label>
+
+          <label class="filter-field">
+            <span>Instituição</span>
+            <select id="filterInstitution">
+              <option value="">Todas as instituições</option>
+            </select>
+          </label>
+
+          <label class="filter-field">
+            <span>Conta</span>
+            <select id="filterAccount">
+              <option value="">Todas as contas</option>
+            </select>
+          </label>
+
+          <label class="filter-field">
+            <span>Turma</span>
+            <select id="filterClass">
+              <option value="">Todas as turmas</option>
+            </select>
+          </label>
+
+          <label class="filter-field">
+            <span>Disciplina</span>
+            <select id="filterDiscipline">
+              <option value="">Todas as disciplinas</option>
+            </select>
+          </label>
+
+          <label class="filter-field">
+            <span>Status</span>
+            <select id="filterStatus">
+              <option value="">Todos os status</option>
+              <option value="OK">OK</option>
+              <option value="ATRASO">Gravação atrasada</option>
+              <option value="SEM_GRAVACAO">Sem gravação</option>
+              <option value="AULA_NAO_INICIADA">Aula não iniciada</option>
+              <option value="SEM_PARTICIPANTES">Sem participantes</option>
+              <option value="OUTRO">Outros</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section id="visaoGeral" class="section">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">VISÃO GERAL</span>
+            <h2>Indicadores da seleção atual</h2>
+          </div>
+
+          <div id="selectionBadge" class="selection-badge">Todos os dados</div>
+        </div>
+
+        <div class="kpi-grid">
+          <article class="kpi-card">
+            <div class="kpi-top">
+              <span class="kpi-icon">▣</span>
+              <span class="kpi-label">Aulas monitoradas</span>
+            </div>
+            <strong id="kpiClasses" class="kpi-value">—</strong>
+            <span id="kpiClassesHint" class="kpi-hint">Registros no período</span>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-top">
+              <span class="kpi-icon">◎</span>
+              <span class="kpi-label">Média de participantes</span>
+            </div>
+            <strong id="kpiAverage" class="kpi-value">—</strong>
+            <span id="kpiAverageHint" class="kpi-hint">Por aula</span>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-top">
+              <span class="kpi-icon">↗</span>
+              <span class="kpi-label">Maior pico simultâneo</span>
+            </div>
+            <strong id="kpiPeak" class="kpi-value">—</strong>
+            <span id="kpiPeakHint" class="kpi-hint">Maior concentração observada</span>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-top">
+              <span class="kpi-icon">◉</span>
+              <span class="kpi-label">Gravações no prazo</span>
+            </div>
+            <strong id="kpiOnTime" class="kpi-value">—</strong>
+            <span id="kpiOnTimeHint" class="kpi-hint">Até 10 minutos de atraso</span>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-top">
+              <span class="kpi-icon">◫</span>
+              <span class="kpi-label">Cobertura média</span>
+            </div>
+            <strong id="kpiCoverage" class="kpi-value">—</strong>
+            <span id="kpiCoverageHint" class="kpi-hint">Minutos gravados / duração</span>
+          </article>
+
+          <article class="kpi-card kpi-card-alert">
+            <div class="kpi-top">
+              <span class="kpi-icon">!</span>
+              <span class="kpi-label">Ocorrências</span>
+            </div>
+            <strong id="kpiIssues" class="kpi-value">—</strong>
+            <span id="kpiIssuesHint" class="kpi-hint">Atenções e problemas</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="graficos" class="section">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">ANÁLISES</span>
+            <h2>Comportamento das aulas</h2>
+          </div>
+        </div>
+
+        <div class="analytics-grid">
+          <article class="panel chart-panel chart-panel-wide">
+            <div class="panel-header">
+              <div>
+                <h3>Participação por aula</h3>
+                <p>Participantes únicos comparados ao pico simultâneo</p>
+              </div>
+              <span class="panel-tag">TOP 12</span>
+            </div>
+
+            <div class="chart-wrap chart-wrap-large">
+              <canvas id="participantsChart"></canvas>
+            </div>
+          </article>
+
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Status das aulas</h3>
+                <p>Distribuição do resultado final</p>
+              </div>
+            </div>
+
+            <div class="chart-wrap chart-wrap-donut">
+              <canvas id="statusChart"></canvas>
+            </div>
+
+            <div id="statusLegend" class="custom-legend"></div>
+          </article>
+
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Cobertura de gravação</h3>
+                <p>Aulas com menor percentual de cobertura</p>
+              </div>
+              <span class="panel-tag">ATENÇÃO</span>
+            </div>
+
+            <div class="chart-wrap chart-wrap-large">
+              <canvas id="coverageChart"></canvas>
+            </div>
+          </article>
+
+          <article class="panel chart-panel chart-panel-wide">
+            <div class="panel-header">
+              <div>
+                <h3>Evolução semanal</h3>
+                <p>Média de participantes e percentual de gravações no prazo</p>
+              </div>
+            </div>
+
+            <div class="chart-wrap chart-wrap-large">
+              <canvas id="weeklyChart"></canvas>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="atencao" class="section">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">PRIORIDADES</span>
+            <h2>Aulas que exigem atenção</h2>
+          </div>
+          <span id="attentionCount" class="count-badge">0</span>
+        </div>
+
+        <div id="attentionList" class="attention-grid">
+          <div class="empty-state">
+            <span>✓</span>
+            <strong>Nenhuma ocorrência na seleção atual</strong>
+            <p>As aulas selecionadas não apresentam alertas.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="detalhamento" class="section operational-section">
+        <div class="section-header detail-header">
+          <div>
+            <span class="section-kicker">DETALHAMENTO</span>
+            <h2>Aulas monitoradas</h2>
+          </div>
+
+          <div class="table-tools no-print">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="tableSearch" type="search" placeholder="Buscar aula, instituição, turma..." />
+            </label>
+
+            <select id="pageSize" class="small-select" aria-label="Linhas por página">
+              <option value="10">10 linhas</option>
+              <option value="20" selected>20 linhas</option>
+              <option value="50">50 linhas</option>
+              <option value="100">100 linhas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel table-panel">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th data-sort="aula">Aula <span>↕</span></th>
+                  <th data-sort="inicio">Data / horário <span>↕</span></th>
+                  <th data-sort="instituicao">Instituição <span>↕</span></th>
+                  <th data-sort="turma">Turma <span>↕</span></th>
+                  <th class="numeric" data-sort="participantes">Participantes <span>↕</span></th>
+                  <th class="numeric" data-sort="pico">Pico <span>↕</span></th>
+                  <th class="numeric" data-sort="atrasoGravacao">Atraso <span>↕</span></th>
+                  <th class="numeric" data-sort="minutosGravados">Gravado <span>↕</span></th>
+                  <th class="numeric" data-sort="cobertura">Cobertura <span>↕</span></th>
+                  <th data-sort="statusTipo">Status <span>↕</span></th>
+                  <th class="table-action no-print"></th>
+                </tr>
+              </thead>
+
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="table-footer no-print">
+            <span id="tableInfo">0 registros</span>
+
+            <div class="pagination">
+              <button id="prevPage" class="pagination-btn">←</button>
+              <span id="pageIndicator">1 / 1</span>
+              <button id="nextPage" class="pagination-btn">→</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="page-footer">
+        <div>
+          <strong>ConsultaEDU · Monitor Meet</strong>
+          <span>Dados consolidados automaticamente a partir dos relatórios de monitoramento.</span>
+        </div>
+        <span id="footerUpdatedAt">—</span>
+      </footer>
+    </main>
+  </div>
+
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
+  <aside id="detailsDrawer" class="details-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <span class="section-kicker">DETALHES DA AULA</span>
+        <h2 id="drawerTitle">Aula</h2>
+      </div>
+
+      <button id="drawerClose" class="icon-button" aria-label="Fechar">×</button>
+    </div>
+
+    <div id="drawerStatus" class="drawer-status"></div>
+
+    <div class="drawer-content">
+      <section class="drawer-section">
+        <h3>Programação</h3>
+        <div class="detail-list">
+          <div>
+            <span>Instituição</span>
+            <strong id="drawerInstitution">—</strong>
+          </div>
+          <div>
+            <span>Conta</span>
+            <strong id="drawerAccount">—</strong>
+          </div>
+          <div>
+            <span>Turma</span>
+            <strong id="drawerClass">—</strong>
+          </div>
+          <div>
+            <span>Semana</span>
+            <strong id="drawerWeek">—</strong>
+          </div>
+          <div>
+            <span>Início</span>
+            <strong id="drawerStart">—</strong>
+          </div>
+          <div>
+            <span>Fim</span>
+            <strong id="drawerEnd">—</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>Participação</h3>
+        <div class="drawer-metrics">
+          <div class="drawer-metric">
+            <span>Participantes</span>
+            <strong id="drawerParticipants">—</strong>
+          </div>
+          <div class="drawer-metric">
+            <span>Pico simultâneo</span>
+            <strong id="drawerPeak">—</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="drawer-section">
+        <h3>Gravação</h3>
+        <div class="detail-list">
+          <div>
+            <span>Início da gravação</span>
+            <strong id="drawerRecordingStart">—</strong>
+          </div>
+          <div>
+            <span>Fim da gravação</span>
+            <strong id="drawerRecordingEnd">—</strong>
+          </div>
+          <div>
+            <span>Atraso no início</span>
+            <strong id="drawerDelay">—</strong>
+          </div>
+          <div>
+            <span>Minutos gravados</span>
+            <strong id="drawerRecorded">—</strong>
+          </div>
+          <div>
+            <span>Duração prevista</span>
+            <strong id="drawerDuration">—</strong>
+          </div>
+        </div>
+
+        <div class="coverage-detail">
+          <div>
+            <span>Cobertura</span>
+            <strong id="drawerCoverage">—</strong>
+          </div>
+          <div class="progress-track">
+            <div id="drawerCoverageBar" class="progress-bar"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="drawer-section operational-only">
+        <h3>Dados técnicos</h3>
+        <div class="technical-box">
+          <span>Código Meet</span>
+          <code id="drawerMeetCode">—</code>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <script src="script.js"></script>
+</body>
+</html>
