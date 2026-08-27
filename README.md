@@ -66,3 +66,11 @@ Adicionado filtro dinâmico por disciplina, usando o campo `AULA` da API. Todos 
 - Sidebar em verde escuro
 - Gráficos atualizados para a nova identidade
 - Mantido o filtro dinâmico por disciplina da versão 1.1
+
+## Versão 1.3
+
+Correção do filtro Disciplina:
+- restaura o carregamento das disciplinas a partir do campo AULA;
+- lista apenas disciplinas compatíveis com Semana, Instituição, Conta e Turma;
+- aplica a disciplina escolhida a KPIs, gráficos, ocorrências e tabela;
+- preserva toda a identidade visual verde da versão 1.2.

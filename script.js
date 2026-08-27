@@ -34,7 +34,7 @@ function cacheElements() {
   const ids = [
     "loadingScreen", "toast",
     "apiStatusDot", "apiStatusText", "apiUpdatedAt", "footerUpdatedAt",
-    "filterWeek", "filterInstitution", "filterAccount", "filterClass", "filterStatus",
+    "filterWeek", "filterInstitution", "filterAccount", "filterClass", "filterDiscipline", "filterStatus",
     "clearFiltersButton", "selectionBadge",
     "kpiClasses", "kpiClassesHint", "kpiAverage", "kpiAverageHint",
     "kpiPeak", "kpiPeakHint", "kpiOnTime", "kpiOnTimeHint",
@@ -65,6 +65,7 @@ function bindEvents() {
     els.filterInstitution,
     els.filterAccount,
     els.filterClass,
+    els.filterDiscipline,
     els.filterStatus
   ].forEach(el => {
     el.addEventListener("change", () => {
@@ -225,6 +226,7 @@ function populateInitialFilters() {
   setSelectOptions(els.filterInstitution, uniqueSorted(state.rawData.map(x => x.instituicao)), "Todas as instituições");
   setSelectOptions(els.filterAccount, uniqueSorted(state.rawData.map(x => x.conta)), "Todas as contas");
   setSelectOptions(els.filterClass, uniqueSorted(state.rawData.map(x => x.turma)), "Todas as turmas");
+  setSelectOptions(els.filterDiscipline, uniqueSorted(state.rawData.map(x => x.aula)), "Todas as disciplinas");
 
   // Por padrão, abre na semana mais recente disponível.
   const weeks = uniqueSorted(state.rawData.map(x => x.semana), weekSort);
@@ -241,6 +243,7 @@ function applyFilters() {
     if (filters.institution && item.instituicao !== filters.institution) return false;
     if (filters.account && item.conta !== filters.account) return false;
     if (filters.className && item.turma !== filters.className) return false;
+    if (filters.discipline && item.aula !== filters.discipline) return false;
     if (filters.status && item.statusTipo !== filters.status) return false;
     return true;
   });
@@ -285,6 +288,19 @@ function refreshDependentFilters() {
     uniqueSorted(baseForClass.map(x => x.turma)),
     "Todas as turmas"
   );
+
+  const baseForDiscipline = state.rawData.filter(item =>
+    (!els.filterWeek.value || item.semana === els.filterWeek.value) &&
+    (!els.filterInstitution.value || item.instituicao === els.filterInstitution.value) &&
+    (!els.filterAccount.value || item.conta === els.filterAccount.value) &&
+    (!els.filterClass.value || item.turma === els.filterClass.value)
+  );
+
+  refillSelectPreserving(
+    els.filterDiscipline,
+    uniqueSorted(baseForDiscipline.map(x => x.aula)),
+    "Todas as disciplinas"
+  );
 }
 
 function clearFilters() {
@@ -292,6 +308,7 @@ function clearFilters() {
   els.filterInstitution.value = "";
   els.filterAccount.value = "";
   els.filterClass.value = "";
+  els.filterDiscipline.value = "";
   els.filterStatus.value = "";
   state.page = 1;
   applyFilters();
@@ -303,6 +320,7 @@ function getFilters() {
     institution: els.filterInstitution.value,
     account: els.filterAccount.value,
     className: els.filterClass.value,
+    discipline: els.filterDiscipline.value,
     status: els.filterStatus.value
   };
 }
@@ -315,6 +333,7 @@ function updateSelectionBadge() {
   if (filters.institution) parts.push(filters.institution);
   if (filters.account) parts.push(filters.account);
   if (filters.className) parts.push(filters.className);
+  if (filters.discipline) parts.push(filters.discipline);
   if (filters.status) parts.push(statusLabel(filters.status));
 
   els.selectionBadge.textContent = parts.length ? parts.join(" · ") : "Todos os dados";
