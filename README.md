@@ -56,3 +56,13 @@ O dashboard não utiliza a guia de participantes individuais e não exibe nomes 
 ## Versão 1.1
 
 Adicionado filtro dinâmico por disciplina, usando o campo `AULA` da API. Todos os indicadores, gráficos, ocorrências e a tabela respondem ao filtro.
+
+## Versão 1.2
+
+- Identidade visual CE Suporte aplicada
+- Logo oficial na sidebar e na tela de carregamento
+- Favicon / ícone do site
+- Paleta principal alterada de azul para verde
+- Sidebar em verde escuro
+- Gráficos atualizados para a nova identidade
+- Mantido o filtro dinâmico por disciplina da versão 1.1

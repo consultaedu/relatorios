@@ -34,7 +34,7 @@ function cacheElements() {
   const ids = [
     "loadingScreen", "toast",
     "apiStatusDot", "apiStatusText", "apiUpdatedAt", "footerUpdatedAt",
-    "filterWeek", "filterInstitution", "filterAccount", "filterClass", "filterDiscipline", "filterStatus",
+    "filterWeek", "filterInstitution", "filterAccount", "filterClass", "filterStatus",
     "clearFiltersButton", "selectionBadge",
     "kpiClasses", "kpiClassesHint", "kpiAverage", "kpiAverageHint",
     "kpiPeak", "kpiPeakHint", "kpiOnTime", "kpiOnTimeHint",
@@ -65,7 +65,6 @@ function bindEvents() {
     els.filterInstitution,
     els.filterAccount,
     els.filterClass,
-    els.filterDiscipline,
     els.filterStatus
   ].forEach(el => {
     el.addEventListener("change", () => {
@@ -226,7 +225,6 @@ function populateInitialFilters() {
   setSelectOptions(els.filterInstitution, uniqueSorted(state.rawData.map(x => x.instituicao)), "Todas as instituições");
   setSelectOptions(els.filterAccount, uniqueSorted(state.rawData.map(x => x.conta)), "Todas as contas");
   setSelectOptions(els.filterClass, uniqueSorted(state.rawData.map(x => x.turma)), "Todas as turmas");
-  setSelectOptions(els.filterDiscipline, uniqueSorted(state.rawData.map(x => x.aula)), "Todas as disciplinas");
 
   // Por padrão, abre na semana mais recente disponível.
   const weeks = uniqueSorted(state.rawData.map(x => x.semana), weekSort);
@@ -243,7 +241,6 @@ function applyFilters() {
     if (filters.institution && item.instituicao !== filters.institution) return false;
     if (filters.account && item.conta !== filters.account) return false;
     if (filters.className && item.turma !== filters.className) return false;
-    if (filters.discipline && item.aula !== filters.discipline) return false;
     if (filters.status && item.statusTipo !== filters.status) return false;
     return true;
   });
@@ -288,19 +285,6 @@ function refreshDependentFilters() {
     uniqueSorted(baseForClass.map(x => x.turma)),
     "Todas as turmas"
   );
-
-  const baseForDiscipline = state.rawData.filter(item =>
-    (!els.filterWeek.value || item.semana === els.filterWeek.value) &&
-    (!els.filterInstitution.value || item.instituicao === els.filterInstitution.value) &&
-    (!els.filterAccount.value || item.conta === els.filterAccount.value) &&
-    (!els.filterClass.value || item.turma === els.filterClass.value)
-  );
-
-  refillSelectPreserving(
-    els.filterDiscipline,
-    uniqueSorted(baseForDiscipline.map(x => x.aula)),
-    "Todas as disciplinas"
-  );
 }
 
 function clearFilters() {
@@ -308,7 +292,6 @@ function clearFilters() {
   els.filterInstitution.value = "";
   els.filterAccount.value = "";
   els.filterClass.value = "";
-  els.filterDiscipline.value = "";
   els.filterStatus.value = "";
   state.page = 1;
   applyFilters();
@@ -320,7 +303,6 @@ function getFilters() {
     institution: els.filterInstitution.value,
     account: els.filterAccount.value,
     className: els.filterClass.value,
-    discipline: els.filterDiscipline.value,
     status: els.filterStatus.value
   };
 }
@@ -333,7 +315,6 @@ function updateSelectionBadge() {
   if (filters.institution) parts.push(filters.institution);
   if (filters.account) parts.push(filters.account);
   if (filters.className) parts.push(filters.className);
-  if (filters.discipline) parts.push(filters.discipline);
   if (filters.status) parts.push(statusLabel(filters.status));
 
   els.selectionBadge.textContent = parts.length ? parts.join(" · ") : "Todos os dados";
@@ -407,7 +388,7 @@ function renderParticipantsChart() {
         {
           label: "Participantes únicos",
           data: data.map(x => x.participantes),
-          backgroundColor: "rgba(37, 99, 235, .82)",
+          backgroundColor: "rgba(22, 163, 74, .84)",
           borderRadius: 5,
           borderSkipped: false,
           barThickness: 10
@@ -415,7 +396,7 @@ function renderParticipantsChart() {
         {
           label: "Pico simultâneo",
           data: data.map(x => x.pico),
-          backgroundColor: "rgba(8, 145, 178, .64)",
+          backgroundColor: "rgba(132, 204, 22, .68)",
           borderRadius: 5,
           borderSkipped: false,
           barThickness: 10
@@ -557,9 +538,9 @@ function renderWeeklyChart() {
         {
           label: "Média de participantes",
           data: avgParticipants,
-          borderColor: "#2563eb",
-          backgroundColor: "rgba(37,99,235,.08)",
-          pointBackgroundColor: "#2563eb",
+          borderColor: "#16a34a",
+          backgroundColor: "rgba(22,163,74,.09)",
+          pointBackgroundColor: "#16a34a",
           pointRadius: 3,
           tension: .32,
           fill: true,
@@ -568,9 +549,9 @@ function renderWeeklyChart() {
         {
           label: "Gravações no prazo (%)",
           data: onTimePercent,
-          borderColor: "#16a34a",
+          borderColor: "#65a30d",
           backgroundColor: "transparent",
-          pointBackgroundColor: "#16a34a",
+          pointBackgroundColor: "#65a30d",
           pointRadius: 3,
           tension: .32,
           yAxisID: "y1"
@@ -995,7 +976,7 @@ function coverageColor(value, alpha = 1) {
 }
 
 function coverageGradient(value) {
-  if (value >= 90) return "linear-gradient(90deg,#16a34a,#22c55e)";
+  if (value >= 90) return "linear-gradient(90deg,#15803d,#22c55e)";
   if (value >= 75) return "linear-gradient(90deg,#d97706,#f59e0b)";
   return "linear-gradient(90deg,#dc2626,#ef4444)";
 }

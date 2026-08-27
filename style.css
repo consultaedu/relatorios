@@ -10,16 +10,16 @@
   --text: #0f172a;
   --muted: #64748b;
   --muted-2: #94a3b8;
-  --primary: #2563eb;
-  --primary-soft: #eff6ff;
+  --primary: #16a34a;
+  --primary-soft: #ecfdf3;
   --success: #16a34a;
   --success-soft: #f0fdf4;
   --warning: #d97706;
   --warning-soft: #fffbeb;
   --danger: #dc2626;
   --danger-soft: #fef2f2;
-  --violet: #7c3aed;
-  --cyan: #0891b2;
+  --violet: #65a30d;
+  --cyan: #059669;
   --shadow: 0 10px 30px rgba(15, 23, 42, .07);
   --shadow-lg: 0 24px 70px rgba(15, 23, 42, .18);
   --radius: 16px;
@@ -74,28 +74,35 @@ button {
   padding: 24px 18px;
   color: #e2e8f0;
   background:
-    radial-gradient(circle at 20% 10%, rgba(37, 99, 235, .18), transparent 28%),
-    linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    radial-gradient(circle at 18% 8%, rgba(34, 197, 94, .22), transparent 30%),
+    radial-gradient(circle at 90% 26%, rgba(132, 204, 22, .08), transparent 26%),
+    linear-gradient(180deg, #063d2f 0%, #052e24 42%, #071c18 100%);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 8px 26px;
+  gap: 13px;
+  padding: 3px 7px 27px;
 }
 
-.brand-mark {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: white;
-  font-weight: 800;
-  letter-spacing: -.04em;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, .35);
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 15px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: #063d2f;
+  box-shadow: 0 10px 28px rgba(0,0,0,.26);
+}
+
+.loading-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  box-shadow: 0 8px 22px rgba(5, 46, 36, .18);
 }
 
 .brand-copy {
@@ -136,7 +143,8 @@ button {
 .nav-item:hover,
 .nav-item.active {
   color: white;
-  background: rgba(255,255,255,.08);
+  background: linear-gradient(90deg, rgba(34,197,94,.17), rgba(255,255,255,.06));
+  box-shadow: inset 3px 0 0 rgba(74,222,128,.9);
 }
 
 .nav-icon {
@@ -156,7 +164,7 @@ button {
   padding: 13px;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 12px;
-  background: rgba(255,255,255,.04);
+  background: rgba(34,197,94,.045);
 }
 
 .api-status > div {
@@ -279,13 +287,13 @@ button {
 
 .button.primary {
   color: #fff;
-  background: var(--surface-dark);
-  box-shadow: 0 6px 16px rgba(15,23,42,.16);
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  box-shadow: 0 7px 18px rgba(22,163,74,.22);
 }
 
 .button.primary:hover {
   transform: translateY(-1px);
-  background: #1e293b;
+  background: linear-gradient(135deg, #166534, #16a34a);
 }
 
 .button.secondary {
@@ -362,12 +370,12 @@ button {
 }
 
 .text-button:hover {
-  color: #1d4ed8;
+  color: #15803d;
 }
 
 .filters-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.1fr .85fr 1.2fr .95fr;
+  grid-template-columns: 1.25fr 1fr 1.15fr 1fr 1fr;
   gap: 12px;
 }
 
@@ -398,8 +406,8 @@ button {
 .filter-field select:focus,
 .small-select:focus,
 .search-box:focus-within {
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(59,130,246,.08);
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(34,197,94,.10);
 }
 
 .section {
@@ -1104,7 +1112,7 @@ th.numeric {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2563eb, #06b6d4);
+  background: linear-gradient(90deg, #16a34a, #84cc16);
   transition: width .35s ease;
 }
 
@@ -1163,15 +1171,10 @@ th.numeric {
   font-size: 10px;
 }
 
-.loading-mark {
-  width: 38px;
-  height: 38px;
-}
-
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid #dbeafe;
+  border: 2px solid #dcfce7;
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin .7s linear infinite;
