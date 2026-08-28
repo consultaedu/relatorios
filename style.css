@@ -507,6 +507,8 @@ button {
 }
 
 .kpi-label {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   color: var(--muted);
   font-size: 10px;
@@ -528,6 +530,141 @@ button {
   margin-top: 7px;
   color: var(--muted-2);
   font-size: 9px;
+}
+
+
+/* ============================================================
+   AJUDA DOS INDICADORES
+   Ícone "i" com tooltip acessível por mouse, teclado e toque.
+============================================================ */
+
+.kpi-info {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid #bbf7d0;
+  border-radius: 50%;
+  outline: none;
+  color: #15803d;
+  background: #f0fdf4;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+  transition:
+    background .18s ease,
+    border-color .18s ease,
+    color .18s ease,
+    transform .18s ease,
+    box-shadow .18s ease;
+}
+
+.kpi-info:hover,
+.kpi-info:focus-visible,
+.kpi-info:focus {
+  color: #fff;
+  border-color: #16a34a;
+  background: #16a34a;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, .11);
+}
+
+/* Caixa explicativa */
+.kpi-info::after {
+  content: attr(data-tooltip);
+  width: min(270px, calc(100vw - 52px));
+  position: absolute;
+  right: -4px;
+  top: calc(100% + 10px);
+  z-index: 120;
+  padding: 10px 12px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+  color: #f8fafc;
+  background: #0f172a;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .22);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  letter-spacing: 0;
+  transition:
+    opacity .16s ease,
+    visibility .16s ease,
+    transform .16s ease;
+}
+
+/* Pequena seta do tooltip */
+.kpi-info::before {
+  content: "";
+  position: absolute;
+  right: 5px;
+  top: calc(100% + 5px);
+  z-index: 121;
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: #0f172a;
+  transform: rotate(45deg);
+  transition:
+    opacity .16s ease,
+    visibility .16s ease;
+}
+
+.kpi-info:hover::after,
+.kpi-info:focus::after,
+.kpi-info:focus-visible::after,
+.kpi-info:hover::before,
+.kpi-info:focus::before,
+.kpi-info:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+.kpi-info:hover::after,
+.kpi-info:focus::after,
+.kpi-info:focus-visible::after {
+  transform: translateY(0);
+}
+
+/* O card de ocorrências mantém a identidade de alerta */
+.kpi-info-alert {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.kpi-info-alert:hover,
+.kpi-info-alert:focus,
+.kpi-info-alert:focus-visible {
+  color: #fff;
+  border-color: #dc2626;
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, .10);
+}
+
+@media (max-width: 680px) {
+  .kpi-info::after {
+    width: min(260px, calc(100vw - 48px));
+  }
+}
+
+@media print {
+  .kpi-info {
+    display: none !important;
+  }
 }
 
 .analytics-grid {
