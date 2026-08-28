@@ -1,4 +1,4 @@
-const API_URL = "https://monitor-meet-api.marcosdalleprane2.workers.dev/";
+const API_URL = "/api/";
 
 const state = {
   rawData: [],
