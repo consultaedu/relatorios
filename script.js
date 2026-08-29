@@ -217,6 +217,9 @@ function normalizeItem(item) {
     conta: String(item.conta || "").trim(),
     semana: String(item.semana || "").trim(),
     aula: String(item.aula || "").trim(),
+    idSessao: String(item.idSessao || item.id || "").trim(),
+    chaveSessao: String(item.chaveSessao || item.idSessao || item.id || "").trim(),
+    disciplinasSessao: String(item.disciplinasSessao || item.aula || "").trim(),
     gravacao: String(item.gravacao || "").trim()
   };
 }
@@ -346,8 +349,52 @@ function renderAll() {
   renderTable();
 }
 
+/*
+ * ============================================================
+ * SESSÕES COMPARTILHADAS
+ * ============================================================
+ *
+ * A API mantém uma linha acadêmica por disciplina.
+ * Indicadores e gráficos contam a sessão real do Meet apenas
+ * uma vez quando duas disciplinas compartilham horário/link.
+ *
+ * A tabela continua mostrando as disciplinas separadamente.
+ */
+
+function deduplicarPorSessao(itens) {
+  const mapa = new Map();
+
+  itens.forEach((item, indice) => {
+    const chave = String(
+      item.chaveSessao ||
+      item.idSessao ||
+      item.id ||
+      `SEM_SESSAO_${indice}`
+    );
+
+    if (!mapa.has(chave)) {
+      mapa.set(chave, item);
+    }
+  });
+
+  return [...mapa.values()];
+}
+
+
+function nomeExibicaoSessao(item) {
+  const filtros = getFilters();
+
+  if (filtros.discipline) {
+    return item.aula || "";
+  }
+
+  return item.disciplinasSessao || item.aula || "";
+}
+
+
 function renderKpis() {
-  const data = state.filteredData;
+  const linhasAcademicas = state.filteredData;
+  const data = deduplicarPorSessao(linhasAcademicas);
   const total = data.length;
 
   const participationSum = sum(data, x => x.participantes);
@@ -376,8 +423,18 @@ function renderKpis() {
   setText(els.kpiCoverage, formatPercent(averageCoverage));
   setText(els.kpiIssues, formatNumber(issues.length));
 
-  els.kpiClassesHint.textContent = `${formatNumber(participationSum)} participações registradas`;
-  els.kpiAverageHint.textContent = total ? `Média calculada em ${formatNumber(total)} aulas` : "Sem aulas na seleção";
+  const vinculosExtras =
+    linhasAcademicas.length > total
+      ? ` · ${formatNumber(linhasAcademicas.length)} vínculos de disciplina`
+      : "";
+
+  els.kpiClassesHint.textContent =
+    `${formatNumber(participationSum)} participações registradas${vinculosExtras}`;
+
+  els.kpiAverageHint.textContent =
+    total
+      ? `Média calculada em ${formatNumber(total)} sessões de aula`
+      : "Sem aulas na seleção";
   els.kpiPeakHint.textContent = peak ? "Maior valor encontrado na seleção" : "Sem pico registrado";
   els.kpiOnTimeHint.textContent = `${formatNumber(onTime.length)} de ${formatNumber(total)} aulas`;
   els.kpiCoverageHint.textContent = coverageData.length ? `${formatNumber(coverageData.length)} aulas com duração válida` : "Sem cobertura calculável";
@@ -394,7 +451,7 @@ function renderCharts() {
 function renderParticipantsChart() {
   destroyChart("participants");
 
-  const data = [...state.filteredData]
+  const data = deduplicarPorSessao(state.filteredData)
     .sort((a, b) => b.participantes - a.participantes)
     .slice(0, 12)
     .reverse();
@@ -402,7 +459,7 @@ function renderParticipantsChart() {
   state.charts.participants = new Chart(els.participantsChart, {
     type: "bar",
     data: {
-      labels: data.map(x => truncate(x.aula, 34)),
+      labels: data.map(x => truncate(nomeExibicaoSessao(x), 34)),
       datasets: [
         {
           label: "Participantes únicos",
@@ -425,7 +482,7 @@ function renderParticipantsChart() {
     options: chartOptions({
       indexAxis: "y",
       legend: true,
-      tooltipTitle: ctx => data[ctx[0].dataIndex]?.aula || ""
+      tooltipTitle: ctx => nomeExibicaoSessao(data[ctx[0].dataIndex] || {})
     })
   });
 }
@@ -442,7 +499,7 @@ function renderStatusChart() {
     OUTRO: 0
   };
 
-  state.filteredData.forEach(item => {
+  deduplicarPorSessao(state.filteredData).forEach(item => {
     counts[item.statusTipo] = (counts[item.statusTipo] || 0) + 1;
   });
 
@@ -489,7 +546,7 @@ function renderStatusChart() {
 function renderCoverageChart() {
   destroyChart("coverage");
 
-  const data = [...state.filteredData]
+  const data = deduplicarPorSessao(state.filteredData)
     .filter(x => x.duracaoPrevista > 0)
     .sort((a, b) => a.cobertura - b.cobertura)
     .slice(0, 12)
@@ -498,7 +555,7 @@ function renderCoverageChart() {
   state.charts.coverage = new Chart(els.coverageChart, {
     type: "bar",
     data: {
-      labels: data.map(x => truncate(x.aula, 34)),
+      labels: data.map(x => truncate(nomeExibicaoSessao(x), 34)),
       datasets: [{
         label: "Cobertura",
         data: data.map(x => x.cobertura),
@@ -513,7 +570,7 @@ function renderCoverageChart() {
       max: 100,
       percentTicks: true,
       legend: false,
-      tooltipTitle: ctx => data[ctx[0].dataIndex]?.aula || "",
+      tooltipTitle: ctx => nomeExibicaoSessao(data[ctx[0].dataIndex] || {}),
       tooltipLabel: ctx => ` Cobertura: ${formatPercent(ctx.raw)}`
     })
   });
@@ -524,7 +581,12 @@ function renderWeeklyChart() {
 
   const grouped = {};
 
-  state.rawData.forEach(item => {
+  const sessoes =
+    deduplicarPorSessao(
+      state.rawData
+    );
+
+  sessoes.forEach(item => {
     const key = item.semana || "Sem semana";
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(item);
@@ -722,7 +784,7 @@ function destroyChart(key) {
 }
 
 function renderAttention() {
-  const issues = [...state.filteredData]
+  const issues = deduplicarPorSessao(state.filteredData)
     .filter(item => item.statusTipo !== "OK")
     .sort((a, b) => issuePriority(a) - issuePriority(b) || b.atrasoGravacao - a.atrasoGravacao);
 
@@ -746,7 +808,7 @@ function renderAttention() {
       <article class="attention-card ${severe ? "problem" : ""}" data-id="${escapeAttr(item.id)}">
         <div class="attention-card-top">
           <div style="min-width:0">
-            <h3 title="${escapeAttr(item.aula)}">${escapeHtml(item.aula)}</h3>
+            <h3 title="${escapeAttr(nomeExibicaoSessao(item))}">${escapeHtml(nomeExibicaoSessao(item))}</h3>
             <div class="attention-meta">
               ${escapeHtml(item.instituicao || "—")} · ${escapeHtml(formatDateTime(item.inicio))}
             </div>
@@ -789,6 +851,7 @@ function renderTable() {
     rows = rows.filter(item => {
       const haystack = [
         item.aula,
+        item.disciplinasSessao,
         item.instituicao,
         item.turma,
         item.conta,
