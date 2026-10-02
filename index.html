@@ -4,19 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#052e24" />
+  <meta name="referrer" content="no-referrer" />
   <link rel="icon" type="image/png" sizes="192x192" href="assets/logo-ce-suporte-192.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="assets/logo-ce-suporte-192.png" />
   <meta name="description" content="Dashboard executivo de monitoramento de aulas síncronas." />
   <title>ConsultaEDU | Monitoramento de Aulas</title>
 
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script defer src="assets/vendor/chart.umd.min.js"></script>
+  <script defer src="config.js"></script>
+  <script defer src="dashboard-core.js"></script>
+  <script defer src="script.js"></script>
 
   <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-  <div id="loadingScreen" class="loading-screen">
+  <div id="loadingScreen" class="loading-screen" role="status" aria-live="polite">
     <div class="loading-card">
       <img src="assets/logo-ce-suporte-192.png" alt="CE Suporte" class="brand-logo loading-logo" />
       <div>
@@ -30,6 +33,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <div class="app-shell">
+    <a href="#visaoGeral" class="skip-link">Ir para os indicadores</a>
     <aside class="sidebar" id="sidebar">
       <div class="brand">
         <img src="assets/logo-ce-suporte-192.png" alt="CE Suporte" class="brand-logo" />
@@ -75,7 +79,7 @@
     <main class="main-content">
       <header class="topbar">
         <div class="topbar-title">
-          <button id="menuButton" class="icon-button mobile-only" aria-label="Abrir menu">☰</button>
+          <button id="menuButton" class="icon-button mobile-only" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">☰</button>
 
           <div>
             <div class="eyebrow">RELATÓRIO GERENCIAL</div>
@@ -101,6 +105,8 @@
           </button>
         </div>
       </header>
+      <p id="dataNotice" class="data-notice" role="status" hidden></p>
+      <p id="printSummary" class="print-only"></p>
 
       <section class="filter-panel no-print">
         <div class="filter-heading">
@@ -237,16 +243,17 @@
           <article class="kpi-card">
             <div class="kpi-top">
               <span class="kpi-icon">◫</span>
-              <span class="kpi-label">Cobertura média</span>
+              <span class="kpi-label">Tempo gravado</span>
               <button
                 type="button"
                 class="kpi-info"
-                aria-label="Explicação sobre Cobertura média"
-                data-tooltip="Média do percentual da duração prevista das aulas que ficou efetivamente gravada. Ex.: 45 minutos gravados em uma aula de 60 minutos representam 75% de cobertura."
+                aria-label="Explicação sobre Tempo gravado"
+                data-tooltip="Soma dos minutos gravados informados pela API dividida pela soma das durações previstas, contando cada sessão uma vez e respeitando os filtros. Só entram nos dois totais sessões com ambos os tempos válidos; a base parcial é indicada. Não é uma média de porcentagens. O relatório de uma conta analisada considera uma única gravação por bloco, recortada ao horário e arredondada; reinícios podem ficar fora do total. As fórmulas de consolidação e as demais contas não foram verificadas. Esta relação não comprova cobertura integral."
               >i</button>
             </div>
-            <strong id="kpiCoverage" class="kpi-value">—</strong>
+            <strong id="kpiCoverage" class="kpi-value recording-value">—</strong>
             <span id="kpiCoverageHint" class="kpi-hint">Minutos gravados / duração</span>
+            <span id="recordingNote" class="kpi-hint recording-note"></span>
           </article>
 
           <article class="kpi-card kpi-card-alert">
@@ -267,6 +274,7 @@
       </section>
 
       <section id="graficos" class="section">
+        <p id="chartsNotice" class="data-notice" role="status" hidden></p>
         <div class="section-header">
           <div>
             <span class="section-kicker">ANÁLISES</span>
@@ -307,8 +315,8 @@
           <article class="panel chart-panel">
             <div class="panel-header">
               <div>
-                <h3>Cobertura de gravação</h3>
-                <p>Aulas com menor percentual de cobertura</p>
+                <h3>Tempo gravado / previsto</h3>
+                <p>12 menores relações de duração informadas pela API; dados ausentes excluídos</p>
               </div>
               <span class="panel-tag">ATENÇÃO</span>
             </div>
@@ -322,7 +330,7 @@
             <div class="panel-header">
               <div>
                 <h3>Evolução semanal</h3>
-                <p>Média de participantes e percentual de gravações no prazo</p>
+                <p>Seleção atual: média de participantes e gravações no prazo; lacunas indicam dados ausentes</p>
               </div>
             </div>
 
@@ -341,6 +349,7 @@
           </div>
           <span id="attentionCount" class="count-badge">0</span>
         </div>
+        <p id="attentionHint" class="kpi-hint"></p>
 
         <div id="attentionList" class="attention-grid">
           <div class="empty-state">
@@ -361,7 +370,7 @@
           <div class="table-tools no-print">
             <label class="search-box">
               <span>⌕</span>
-              <input id="tableSearch" type="search" placeholder="Buscar aula, instituição, turma..." />
+              <input id="tableSearch" type="search" aria-label="Pesquisar na tabela de aulas" placeholder="Buscar aula, instituição, turma..." />
             </label>
 
             <select id="pageSize" class="small-select" aria-label="Linhas por página">
@@ -375,7 +384,8 @@
 
         <div class="panel table-panel">
           <div class="table-scroll">
-            <table>
+            <table aria-label="Vínculos de disciplina das sessões selecionadas">
+              <caption class="table-caption">Uma linha por disciplina; indicadores contam sessões únicas. Pesquisa e paginação afetam somente a tabela. Tempos são informados pela API; a relação de durações não comprova cobertura do horário.</caption>
               <thead>
                 <tr>
                   <th data-sort="aula">Aula <span>↕</span></th>
@@ -386,7 +396,7 @@
                   <th class="numeric" data-sort="pico">Pico <span>↕</span></th>
                   <th class="numeric" data-sort="atrasoGravacao">Atraso <span>↕</span></th>
                   <th class="numeric" data-sort="minutosGravados">Gravado <span>↕</span></th>
-                  <th class="numeric" data-sort="cobertura">Cobertura <span>↕</span></th>
+                  <th class="numeric" data-sort="cobertura">Tempo / previsto <span>↕</span></th>
                   <th data-sort="statusTipo">Status <span>↕</span></th>
                   <th class="table-action no-print"></th>
                 </tr>
@@ -400,9 +410,9 @@
             <span id="tableInfo">0 registros</span>
 
             <div class="pagination">
-              <button id="prevPage" class="pagination-btn">←</button>
+              <button id="prevPage" class="pagination-btn" aria-label="Página anterior">←</button>
               <span id="pageIndicator">1 / 1</span>
-              <button id="nextPage" class="pagination-btn">→</button>
+              <button id="nextPage" class="pagination-btn" aria-label="Próxima página">→</button>
             </div>
           </div>
         </div>
@@ -420,7 +430,7 @@
 
   <div id="drawerBackdrop" class="drawer-backdrop"></div>
 
-  <aside id="detailsDrawer" class="details-drawer" aria-hidden="true">
+  <aside id="detailsDrawer" class="details-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert>
     <div class="drawer-header">
       <div>
         <span class="section-kicker">DETALHES DA AULA</span>
@@ -504,13 +514,14 @@
 
         <div class="coverage-detail">
           <div>
-            <span>Cobertura</span>
+            <span>Tempo / previsto (API)</span>
             <strong id="drawerCoverage">—</strong>
           </div>
           <div class="progress-track">
             <div id="drawerCoverageBar" class="progress-bar"></div>
           </div>
         </div>
+        <p id="drawerRecordingNote" class="kpi-hint"></p>
       </section>
 
       <section class="drawer-section operational-only">
@@ -523,6 +534,6 @@
     </div>
   </aside>
 
-  <script src="script.js"></script>
+  <noscript><p class="data-notice">Ative o JavaScript para consultar os relatórios.</p></noscript>
 </body>
 </html>

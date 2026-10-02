@@ -1,10 +1,13 @@
-const API_URL = "/api/";
+const CONFIG = window.DASHBOARD_CONFIG || {};
+const API_URL = CONFIG.apiUrl || "/api/";
+const Core = window.DashboardCore;
 
 const state = {
   rawData: [],
   filteredData: [],
   tableData: [],
   apiUpdatedAt: "",
+  apiConsultedAt: "",
   view: "executive",
   sort: {
     key: "inicio",
@@ -13,6 +16,9 @@ const state = {
   page: 1,
   pageSize: 20,
   search: "",
+  loaded: false,
+  loading: false,
+  printing: false,
   charts: {
     participants: null,
     status: null,
@@ -32,7 +38,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function cacheElements() {
   const ids = [
-    "loadingScreen", "toast",
+    "loadingScreen", "toast", "dataNotice", "printSummary", "chartsNotice", "recordingNote", "attentionHint",
     "apiStatusDot", "apiStatusText", "apiUpdatedAt", "footerUpdatedAt",
     "filterWeek", "filterInstitution", "filterAccount", "filterClass", "filterDiscipline", "filterStatus",
     "clearFiltersButton", "selectionBadge",
@@ -57,6 +63,16 @@ function cacheElements() {
   ids.forEach(id => {
     els[id] = document.getElementById(id);
   });
+  document.querySelectorAll(".kpi-info").forEach((button, index) => {
+    const explanation = document.createElement("span");
+    explanation.id = `kpiExplanation${index}`;
+    explanation.className = "sr-only";
+    explanation.textContent = button.dataset.tooltip;
+    button.after(explanation);
+    button.setAttribute("aria-describedby", explanation.id);
+  });
+  updateSidebarState();
+  window.matchMedia?.("(max-width: 920px)")?.addEventListener("change", updateSidebarState);
 }
 
 function bindEvents() {
@@ -106,12 +122,25 @@ function bindEvents() {
   els.refreshButton.addEventListener("click", async () => {
     els.refreshButton.disabled = true;
     els.refreshButton.innerHTML = "<span>↻</span> Atualizando...";
-    await loadData({ showLoading: false });
-    els.refreshButton.disabled = false;
-    els.refreshButton.innerHTML = "<span>↻</span> Atualizar";
+    try { await loadData({ showLoading: false }); }
+    finally {
+      els.refreshButton.disabled = false;
+      els.refreshButton.innerHTML = "<span>↻</span> Atualizar";
+    }
   });
 
   els.printButton.addEventListener("click", () => window.print());
+  window.addEventListener("beforeprint", () => {
+    state.printing = true;
+    renderTable();
+    updatePrintSummary();
+    Object.values(state.charts).forEach(chart => { chart?.stop?.(); chart?.resize(); chart?.update?.("none"); });
+  });
+  window.addEventListener("afterprint", () => {
+    state.printing = false;
+    renderTable();
+    Object.values(state.charts).forEach(chart => chart?.resize());
+  });
 
   els.executiveViewBtn.addEventListener("click", () => setView("executive"));
   els.operationalViewBtn.addEventListener("click", () => setView("operational"));
@@ -120,7 +149,9 @@ function bindEvents() {
   els.drawerBackdrop.addEventListener("click", closeDrawer);
 
   els.menuButton.addEventListener("click", () => {
-    els.sidebar.classList.toggle("open");
+    const open = els.sidebar.classList.toggle("open");
+    els.menuButton.setAttribute("aria-expanded", String(open));
+    updateSidebarState();
   });
 
   document.querySelectorAll(".nav-item").forEach(button => {
@@ -129,14 +160,17 @@ function bindEvents() {
       button.classList.add("active");
 
       const target = document.getElementById(button.dataset.scroll);
+      if (button.dataset.scroll === "detalhamento") setView("operational");
       if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
 
       els.sidebar.classList.remove("open");
+      els.menuButton.setAttribute("aria-expanded", "false");
+      updateSidebarState();
     });
   });
 
   document.querySelectorAll("th[data-sort]").forEach(th => {
-    th.addEventListener("click", () => {
+    const sort = () => {
       const key = th.dataset.sort;
 
       if (state.sort.key === key) {
@@ -148,97 +182,109 @@ function bindEvents() {
 
       state.page = 1;
       renderTable();
+    };
+    th.tabIndex = 0;
+    th.setAttribute("aria-sort", "none");
+    th.addEventListener("click", sort);
+    th.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); }
     });
   });
 
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") closeDrawer();
+    if (e.key === "Escape") {
+      closeDrawer();
+      els.sidebar.classList.remove("open");
+      els.menuButton.setAttribute("aria-expanded", "false");
+      updateSidebarState();
+    }
+    if (e.key === "Tab" && els.detailsDrawer.classList.contains("open")) {
+      // O painel só contém o botão Fechar como controle interativo.
+      e.preventDefault();
+      els.drawerClose.focus();
+    }
   });
 }
 
+function updateSidebarState() {
+  const mobile = window.matchMedia?.("(max-width: 920px)")?.matches || false;
+  const hidden = mobile && !els.sidebar.classList.contains("open");
+  els.sidebar.inert = hidden;
+  els.sidebar.setAttribute("aria-hidden", String(hidden));
+}
+
 async function loadData({ showLoading = true } = {}) {
+  if (state.loading) return;
+  state.loading = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs || 25000);
   if (showLoading) els.loadingScreen.classList.remove("hidden");
 
   setApiState("loading");
 
   try {
-    const cacheBuster = `t=${Date.now()}`;
-    const response = await fetch(`${API_URL}?${cacheBuster}`, {
+    const url = new URL(API_URL, window.location.href);
+    if (!showLoading) url.searchParams.set("refresh", "1");
+    const response = await fetch(url, {
       method: "GET",
-      cache: "no-store"
+      cache: "no-store",
+      signal: controller.signal
     });
 
     if (!response.ok) {
       throw new Error(`API retornou HTTP ${response.status}`);
     }
 
-    const payload = await response.json();
+    let payload;
+    try { payload = await response.json(); }
+    catch { throw new Error("A API não retornou JSON válido."); }
 
     if (!payload || payload.ok !== true) {
-      throw new Error(payload?.erro || "A API respondeu com erro.");
+      throw new Error("A API respondeu com erro.");
     }
 
-    state.rawData = Array.isArray(payload.dados)
-      ? payload.dados.map(normalizeItem)
-      : [];
+    const rows = Core.validatePayload(payload);
+    closeDrawer();
+    state.rawData = rows;
 
-    state.apiUpdatedAt = payload.atualizadoEm || "";
+    state.apiUpdatedAt = typeof payload.atualizadoEm === "string" ? payload.atualizadoEm : "";
+    state.apiConsultedAt = typeof payload.consultadoEm === "string" ? payload.consultadoEm : "";
     updateApiTimestamps();
 
     populateInitialFilters();
     applyFilters();
+    state.loaded = true;
+    els.dataNotice.textContent = rows.length ? "" : "A API retornou uma lista vazia. Não há aulas disponíveis.";
+    els.dataNotice.hidden = !!rows.length;
 
     setApiState("online");
 
-    showToast(`Dados atualizados: ${formatNumber(state.rawData.length)} aulas carregadas.`);
+    showToast(`Consulta concluída: ${formatNumber(state.rawData.length)} vínculos acadêmicos carregados.`);
 
   } catch (error) {
-    console.error(error);
     setApiState("error");
+    if (error.name === "AbortError") error = new Error("A API excedeu o tempo limite. Tente atualizar novamente.");
     renderApiError(error);
     showToast(`Erro ao carregar dados: ${error.message}`, true);
   } finally {
+    clearTimeout(timeout);
+    state.loading = false;
     setTimeout(() => els.loadingScreen.classList.add("hidden"), 180);
   }
 }
 
-function normalizeItem(item) {
-  return {
-    ...item,
-    participantes: safeNumber(item.participantes),
-    pico: safeNumber(item.pico),
-    atrasoGravacao: safeNumber(item.atrasoGravacao),
-    minutosGravados: safeNumber(item.minutosGravados),
-    duracaoPrevista: safeNumber(item.duracaoPrevista),
-    cobertura: safeNumber(item.cobertura),
-    statusTipo: String(item.statusTipo || "OUTRO").trim().toUpperCase(),
-    instituicao: String(item.instituicao || "").trim(),
-    turma: String(item.turma || "").trim(),
-    conta: String(item.conta || "").trim(),
-    semana: String(item.semana || "").trim(),
-    aula: String(item.aula || "").trim(),
-    idSessao: String(item.idSessao || item.id || "").trim(),
-    chaveSessao: String(item.chaveSessao || item.idSessao || item.id || "").trim(),
-    disciplinasSessao: String(item.disciplinasSessao || item.aula || "").trim(),
-    gravacao: String(item.gravacao || "").trim()
-  };
-}
-
 function populateInitialFilters() {
-  setSelectOptions(els.filterWeek, uniqueSorted(state.rawData.map(x => x.semana), weekSort), "Todas as semanas");
-  setSelectOptions(els.filterInstitution, uniqueSorted(state.rawData.map(x => x.instituicao)), "Todas as instituições");
-  setSelectOptions(els.filterAccount, uniqueSorted(state.rawData.map(x => x.conta)), "Todas as contas");
-  setSelectOptions(els.filterClass, uniqueSorted(state.rawData.map(x => x.turma)), "Todas as turmas");
-  setSelectOptions(els.filterDiscipline, uniqueSorted(state.rawData.map(x => x.aula)), "Todas as disciplinas");
+  refillSelectPreserving(els.filterWeek, uniqueSorted(state.rawData.map(x => x.semana), weekSort), "Todas as semanas");
 
   // Por padrão, abre na semana mais recente disponível.
   const weeks = uniqueSorted(state.rawData.map(x => x.semana), weekSort);
-  if (weeks.length && !els.filterWeek.value) {
+  if (weeks.length && !state.loaded) {
     els.filterWeek.value = weeks[0];
   }
 }
 
 function applyFilters() {
+  refreshDependentFilters();
   const filters = getFilters();
 
   state.filteredData = state.rawData.filter(item => {
@@ -251,7 +297,6 @@ function applyFilters() {
     return true;
   });
 
-  refreshDependentFilters();
   updateSelectionBadge();
   renderAll();
 }
@@ -313,6 +358,8 @@ function clearFilters() {
   els.filterClass.value = "";
   els.filterDiscipline.value = "";
   els.filterStatus.value = "";
+  els.tableSearch.value = "";
+  state.search = "";
   state.page = 1;
   applyFilters();
 }
@@ -362,22 +409,7 @@ function renderAll() {
  */
 
 function deduplicarPorSessao(itens) {
-  const mapa = new Map();
-
-  itens.forEach((item, indice) => {
-    const chave = String(
-      item.chaveSessao ||
-      item.idSessao ||
-      item.id ||
-      `SEM_SESSAO_${indice}`
-    );
-
-    if (!mapa.has(chave)) {
-      mapa.set(chave, item);
-    }
-  });
-
-  return [...mapa.values()];
+  return Core.deduplicate(itens);
 }
 
 
@@ -392,67 +424,75 @@ function nomeExibicaoSessao(item) {
 }
 
 
+function recordingRatio(item) {
+  const value = item.minutosGravados !== null && item.duracaoPrevista > 0
+    ? item.minutosGravados / item.duracaoPrevista * 100 : null;
+  return Number.isFinite(value) ? value : null;
+}
+
 function renderKpis() {
-  const linhasAcademicas = state.filteredData;
-  const data = deduplicarPorSessao(linhasAcademicas);
+  const rows = state.filteredData;
+  const data = deduplicarPorSessao(rows);
   const total = data.length;
-
-  const participationSum = sum(data, x => x.participantes);
-  const average = total ? participationSum / total : 0;
-  const peak = total ? Math.max(...data.map(x => x.pico)) : 0;
-
-  const withRecording = data.filter(x => x.gravacao.toUpperCase() === "SIM");
-  const onTime = data.filter(x =>
-    x.gravacao.toUpperCase() === "SIM" &&
-    x.atrasoGravacao <= 10
-  );
-
-  const onTimePercent = total ? (onTime.length / total) * 100 : 0;
-
-  const coverageData = data.filter(x => x.duracaoPrevista > 0);
-  const averageCoverage = coverageData.length
-    ? sum(coverageData, x => x.cobertura) / coverageData.length
-    : 0;
-
+  const participants = data.filter(x => x.participantes !== null);
+  const peaks = data.filter(x => x.pico !== null);
+  const onTime = data.filter(x => Core.onTime(x) === true);
+  const unknownOnTime = data.filter(x => Core.onTime(x) === null).length;
+  const totals = Core.recordingTotals(data, CONFIG.recordingContract);
   const issues = data.filter(x => x.statusTipo !== "OK");
 
-  setText(els.kpiClasses, formatNumber(total));
-  setText(els.kpiAverage, formatDecimal(average, 1));
-  setText(els.kpiPeak, formatNumber(peak));
-  setText(els.kpiOnTime, formatPercent(onTimePercent));
-  setText(els.kpiCoverage, formatPercent(averageCoverage));
-  setText(els.kpiIssues, formatNumber(issues.length));
+  setText(els.kpiClasses, state.loaded || state.loading ? formatNumber(total) : "—");
+  setText(els.kpiAverage, formatDecimal(Core.mean(data, "participantes"), 1));
+  setText(els.kpiPeak, formatNumber(peaks.length ? peaks.reduce((max, x) => Math.max(max, x.pico), 0) : null));
+  setText(els.kpiOnTime, total ? (unknownOnTime ? `${onTime.length}/${total}` : formatPercent(onTime.length / total * 100)) : "—");
+  setText(els.kpiIssues, total ? formatNumber(issues.length) : "—");
+  els.kpiClassesHint.textContent = `${total} sessões · ${rows.length} vínculos de disciplina`;
+  els.kpiAverageHint.textContent = `${participants.length} de ${total} sessões com participantes informados`;
+  els.kpiPeakHint.textContent = `${peaks.length} de ${total} sessões com pico informado`;
+  els.kpiOnTimeHint.textContent = `${onTime.length} de ${total} sessões confirmadas no prazo${unknownOnTime ? ` · ${unknownOnTime} sem informação` : ""}`;
+  els.kpiIssuesHint.textContent = total ? `${issues.length} sessões fora do status OK` : "Sem aulas na seleção";
 
-  const vinculosExtras =
-    linhasAcademicas.length > total
-      ? ` · ${formatNumber(linhasAcademicas.length)} vínculos de disciplina`
-      : "";
-
-  els.kpiClassesHint.textContent =
-    `${formatNumber(participationSum)} participações registradas${vinculosExtras}`;
-
-  els.kpiAverageHint.textContent =
-    total
-      ? `Média calculada em ${formatNumber(total)} sessões de aula`
-      : "Sem aulas na seleção";
-  els.kpiPeakHint.textContent = peak ? "Maior valor encontrado na seleção" : "Sem pico registrado";
-  els.kpiOnTimeHint.textContent = `${formatNumber(onTime.length)} de ${formatNumber(total)} aulas`;
-  els.kpiCoverageHint.textContent = coverageData.length ? `${formatNumber(coverageData.length)} aulas com duração válida` : "Sem cobertura calculável";
-  els.kpiIssuesHint.textContent = issues.length ? "Aulas fora do status OK" : "Nenhuma ocorrência";
+  els.kpiCoverage.textContent = totals.eligible
+    ? `${Core.duration(totals.recorded)} de ${Core.duration(totals.planned)} previstas` : "—";
+  els.kpiCoverageHint.textContent = totals.percent !== null
+    ? `${formatPercent(totals.percent)} em relação ao previsto${totals.missing ? ` · base parcial: ${totals.eligible}/${total} sessões` : ""}`
+    : "Sem pares válidos de tempo gravado e previsto";
+  els.recordingNote.textContent = `${totals.confirmed ? "Intervalos dentro do horário previsto." : "Tempos da API; reinícios podem estar fora do total. Cobertura do horário não confirmada."}${totals.exceeds ? " Excesso não comprova cobertura integral." : ""}${totals.missing ? ` ${totals.missing} sessões excluídas dos dois totais por dados incompletos.` : ""}`;
+  const conflicts = data.filter(x => x.sessionConflict).length;
+  const withoutSession = data.filter(x => !x.chaveSessao && !x.idSessao).length;
+  if (conflicts || withoutSession) els.recordingNote.textContent += ` ${conflicts ? `${conflicts} sessões com dados divergentes. ` : ""}${withoutSession ? `${withoutSession} sessões sem chave explícita; deduplicação usa ID/linha como fallback.` : ""}`;
 }
 
 function renderCharts() {
+  if (typeof Chart !== "function") {
+    els.chartsNotice.hidden = false;
+    els.chartsNotice.textContent = "Não foi possível carregar os gráficos. Indicadores, ocorrências e tabela continuam disponíveis.";
+    return;
+  }
+  els.chartsNotice.hidden = true;
   renderParticipantsChart();
   renderStatusChart();
   renderCoverageChart();
   renderWeeklyChart();
+  const summaries = {
+    participantsChart: state.charts.participants,
+    statusChart: state.charts.status,
+    coverageChart: state.charts.coverage,
+    weeklyChart: state.charts.weekly
+  };
+  for (const [id, chart] of Object.entries(summaries)) {
+    const summary = chart.data.labels.map((label, index) => `${label}: ${chart.data.datasets.map(dataset => `${dataset.label || "Sessões"} ${dataset.data[index] === null ? "sem informação" : formatDecimal(dataset.data[index], 1)}`).join(", ")}`).join("; ");
+    els[id].setAttribute("role", "img");
+    els[id].setAttribute("aria-label", summary || "Sem dados para os filtros atuais");
+  }
 }
 
 function renderParticipantsChart() {
   destroyChart("participants");
 
   const data = deduplicarPorSessao(state.filteredData)
-    .sort((a, b) => b.participantes - a.participantes)
+    .filter(x => x.participantes !== null || x.pico !== null)
+    .sort((a, b) => (b.participantes ?? -1) - (a.participantes ?? -1))
     .slice(0, 12)
     .reverse();
 
@@ -521,6 +561,7 @@ function renderStatusChart() {
       }]
     },
     options: {
+      animation: false,
       responsive: true,
       maintainAspectRatio: false,
       cutout: "74%",
@@ -547,8 +588,8 @@ function renderCoverageChart() {
   destroyChart("coverage");
 
   const data = deduplicarPorSessao(state.filteredData)
-    .filter(x => x.duracaoPrevista > 0)
-    .sort((a, b) => a.cobertura - b.cobertura)
+    .filter(x => recordingRatio(x) !== null)
+    .sort((a, b) => recordingRatio(a) - recordingRatio(b))
     .slice(0, 12)
     .reverse();
 
@@ -557,9 +598,9 @@ function renderCoverageChart() {
     data: {
       labels: data.map(x => truncate(nomeExibicaoSessao(x), 34)),
       datasets: [{
-        label: "Cobertura",
-        data: data.map(x => x.cobertura),
-        backgroundColor: data.map(x => coverageColor(x.cobertura, .76)),
+        label: "Tempo informado / previsto (%)",
+        data: data.map(recordingRatio),
+        backgroundColor: data.map(x => coverageColor(recordingRatio(x), .76)),
         borderRadius: 5,
         borderSkipped: false,
         barThickness: 11
@@ -567,11 +608,10 @@ function renderCoverageChart() {
     },
     options: chartOptions({
       indexAxis: "y",
-      max: 100,
       percentTicks: true,
       legend: false,
       tooltipTitle: ctx => nomeExibicaoSessao(data[ctx[0].dataIndex] || {}),
-      tooltipLabel: ctx => ` Cobertura: ${formatPercent(ctx.raw)}`
+      tooltipLabel: ctx => { const item = data[ctx.dataIndex]; return ` ${Core.duration(item.minutosGravados)} / ${Core.duration(item.duracaoPrevista)} · ${formatPercent(ctx.raw)} (API)`; }
     })
   });
 }
@@ -579,11 +619,11 @@ function renderCoverageChart() {
 function renderWeeklyChart() {
   destroyChart("weekly");
 
-  const grouped = {};
+  const grouped = Object.create(null);
 
   const sessoes =
     deduplicarPorSessao(
-      state.rawData
+      state.filteredData
     );
 
   sessoes.forEach(item => {
@@ -596,16 +636,15 @@ function renderWeeklyChart() {
 
   const avgParticipants = weeks.map(week => {
     const items = grouped[week];
-    return items.length ? sum(items, x => x.participantes) / items.length : 0;
+    return Core.mean(items, "participantes");
   });
 
   const onTimePercent = weeks.map(week => {
     const items = grouped[week];
-    if (!items.length) return 0;
+    if (!items.length || items.some(x => Core.onTime(x) === null)) return null;
 
     const ok = items.filter(x =>
-      x.gravacao.toUpperCase() === "SIM" &&
-      x.atrasoGravacao <= 10
+      Core.onTime(x) === true
     ).length;
 
     return (ok / items.length) * 100;
@@ -640,6 +679,7 @@ function renderWeeklyChart() {
       ]
     },
     options: {
+      animation: false,
       responsive: true,
       maintainAspectRatio: false,
       interaction: {
@@ -655,7 +695,7 @@ function renderWeeklyChart() {
           title: {
             display: true,
             text: "Participantes",
-            color: "#94a3b8",
+            color: "#64748b",
             font: { size: 9 }
           }
         },
@@ -666,14 +706,14 @@ function renderWeeklyChart() {
           position: "right",
           grid: { drawOnChartArea: false },
           ticks: {
-            color: "#94a3b8",
+            color: "#64748b",
             font: { size: 9 },
             callback: value => `${value}%`
           },
           title: {
             display: true,
             text: "No prazo",
-            color: "#94a3b8",
+            color: "#64748b",
             font: { size: 9 }
           }
         }
@@ -707,13 +747,14 @@ function chartOptions({
 
   if (percentTicks) {
     scales[valueAxis].ticks = {
-      color: "#94a3b8",
+      color: "#64748b",
       font: { size: 9 },
       callback: value => `${value}%`
     };
   }
 
   return {
+    animation: false,
     responsive: true,
     maintainAspectRatio: false,
     indexAxis,
@@ -738,7 +779,7 @@ function axisStyle() {
       drawBorder: false
     },
     ticks: {
-      color: "#94a3b8",
+      color: "#64748b",
       font: { size: 9 },
       maxRotation: 0
     },
@@ -789,13 +830,14 @@ function renderAttention() {
     .sort((a, b) => issuePriority(a) - issuePriority(b) || b.atrasoGravacao - a.atrasoGravacao);
 
   els.attentionCount.textContent = issues.length;
+  els.attentionHint.textContent = issues.length > 9 ? `Exibindo 9 de ${issues.length} ocorrências. Consulte a tabela operacional para as demais.` : "";
 
   if (!issues.length) {
     els.attentionList.innerHTML = `
       <div class="empty-state">
         <span>✓</span>
-        <strong>Nenhuma ocorrência na seleção atual</strong>
-        <p>As aulas selecionadas não apresentam alertas.</p>
+        <strong>${state.filteredData.length ? "Nenhuma ocorrência na seleção atual" : "Sem aulas na seleção atual"}</strong>
+        <p>${state.filteredData.length ? "As aulas selecionadas não apresentam alertas de status." : "Ajuste ou limpe os filtros para consultar outras aulas."}</p>
       </div>
     `;
     return;
@@ -805,7 +847,7 @@ function renderAttention() {
     const severe = ["SEM_GRAVACAO", "AULA_NAO_INICIADA"].includes(item.statusTipo);
 
     return `
-      <article class="attention-card ${severe ? "problem" : ""}" data-id="${escapeAttr(item.id)}">
+      <article class="attention-card ${severe ? "problem" : ""}" tabindex="0" role="button" aria-label="Ver detalhes de ${escapeAttr(nomeExibicaoSessao(item))}" data-id="${escapeAttr(item.rowKey)}">
         <div class="attention-card-top">
           <div style="min-width:0">
             <h3 title="${escapeAttr(nomeExibicaoSessao(item))}">${escapeHtml(nomeExibicaoSessao(item))}</h3>
@@ -826,8 +868,8 @@ function renderAttention() {
             <strong>${formatMinutes(item.atrasoGravacao)}</strong>
           </div>
           <div class="attention-metric">
-            <span>Cobertura</span>
-            <strong>${formatPercent(item.cobertura)}</strong>
+            <span>Tempo / previsto (API)</span>
+            <strong>${formatPercent(recordingRatio(item))}</strong>
           </div>
         </div>
       </article>
@@ -835,9 +877,13 @@ function renderAttention() {
   }).join("");
 
   els.attentionList.querySelectorAll(".attention-card").forEach(card => {
-    card.addEventListener("click", () => {
-      const item = state.rawData.find(x => String(x.id) === String(card.dataset.id));
+    const open = () => {
+      const item = state.rawData.find(x => x.rowKey === card.dataset.id);
       if (item) openDrawer(item);
+    };
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
     });
   });
 }
@@ -873,7 +919,8 @@ function renderTable() {
   if (state.page > totalPages) state.page = totalPages;
 
   const start = (state.page - 1) * state.pageSize;
-  const pageRows = rows.slice(start, start + state.pageSize);
+  const pageRows = state.printing ? rows : rows.slice(start, start + state.pageSize);
+  document.querySelectorAll("th[data-sort]").forEach(th => th.setAttribute("aria-sort", th.dataset.sort === state.sort.key ? (state.sort.direction === "asc" ? "ascending" : "descending") : "none"));
 
   if (!pageRows.length) {
     els.tableBody.innerHTML = `
@@ -899,11 +946,11 @@ function renderTable() {
         <td class="numeric">${formatNumber(item.participantes)}</td>
         <td class="numeric">${formatNumber(item.pico)}</td>
         <td class="numeric">${formatMinutes(item.atrasoGravacao)}</td>
-        <td class="numeric">${formatMinutes(item.minutosGravados)}</td>
-        <td class="numeric"><strong>${formatPercent(item.cobertura)}</strong></td>
+        <td class="numeric">${Core.duration(item.minutosGravados)}<span class="cell-subtitle">de ${Core.duration(item.duracaoPrevista)} previstas</span></td>
+        <td class="numeric"><strong>${formatPercent(recordingRatio(item))}</strong></td>
         <td>${statusPill(item)}</td>
         <td class="table-action no-print">
-          <button class="row-button" data-id="${escapeAttr(item.id)}" aria-label="Ver detalhes">›</button>
+          <button class="row-button" data-id="${escapeAttr(item.rowKey)}" aria-label="Ver detalhes de ${escapeAttr(item.aula)}">›</button>
         </td>
       </tr>
     `).join("");
@@ -911,7 +958,7 @@ function renderTable() {
 
   els.tableBody.querySelectorAll(".row-button").forEach(button => {
     button.addEventListener("click", () => {
-      const item = state.rawData.find(x => String(x.id) === String(button.dataset.id));
+      const item = state.rawData.find(x => x.rowKey === button.dataset.id);
       if (item) openDrawer(item);
     });
   });
@@ -923,6 +970,11 @@ function renderTable() {
   els.pageIndicator.textContent = `${state.page} / ${totalPages}`;
   els.prevPage.disabled = state.page <= 1;
   els.nextPage.disabled = state.page >= totalPages;
+  if (state.printing) updatePrintSummary();
+}
+
+function updatePrintSummary() {
+  els.printSummary.textContent = `Filtros: ${els.selectionBadge.textContent}. Pesquisa da tabela: ${state.search || "nenhuma"}. ${state.tableData.length} vínculos acadêmicos. ${els.footerUpdatedAt.textContent}. ${els.dataNotice.textContent}`;
 }
 
 function getTotalPages() {
@@ -946,22 +998,35 @@ function openDrawer(item) {
   setText(els.drawerDelay, formatMinutes(item.atrasoGravacao));
   setText(els.drawerRecorded, formatMinutes(item.minutosGravados));
   setText(els.drawerDuration, formatMinutes(item.duracaoPrevista));
-  setText(els.drawerCoverage, formatPercent(item.cobertura));
+  setText(els.drawerCoverage, formatPercent(recordingRatio(item)));
+  document.getElementById("drawerRecordingNote").textContent = `Cobertura informada pela API: ${formatPercent(item.cobertura)}. Relação de durações não comprova cobertura do horário previsto.${CONFIG.recordingContract !== "union-within-schedule-v1" ? " Reinícios podem estar fora do tempo informado pela origem." : ""}${item.sessionConflict ? " Dados divergentes entre vínculos da mesma sessão." : ""}`;
   setText(els.drawerMeetCode, item.codigoMeet || "—");
 
-  const width = Math.max(0, Math.min(100, item.cobertura));
+  const ratio = recordingRatio(item);
+  const width = ratio === null ? 0 : Math.max(0, Math.min(100, ratio));
   els.drawerCoverageBar.style.width = `${width}%`;
-  els.drawerCoverageBar.style.background = coverageGradient(item.cobertura);
+  els.drawerCoverageBar.style.background = coverageGradient(ratio);
 
+  state.drawerTrigger = document.activeElement;
+  document.querySelector(".app-shell").inert = true;
+  document.body.classList.add("drawer-open");
+  els.detailsDrawer.inert = false;
   els.detailsDrawer.classList.add("open");
   els.drawerBackdrop.classList.add("open");
   els.detailsDrawer.setAttribute("aria-hidden", "false");
+  els.drawerClose.focus();
 }
 
 function closeDrawer() {
+  if (!els.detailsDrawer) return;
+  const wasOpen = els.detailsDrawer.classList.contains("open");
+  document.querySelector(".app-shell").inert = false;
+  document.body.classList.remove("drawer-open");
   els.detailsDrawer.classList.remove("open");
   els.drawerBackdrop.classList.remove("open");
   els.detailsDrawer.setAttribute("aria-hidden", "true");
+  els.detailsDrawer.inert = true;
+  if (wasOpen && state.drawerTrigger?.isConnected) state.drawerTrigger.focus();
 }
 
 function setView(view) {
@@ -972,6 +1037,8 @@ function setView(view) {
 
   els.executiveViewBtn?.classList.toggle("active", executive);
   els.operationalViewBtn?.classList.toggle("active", !executive);
+  els.executiveViewBtn?.setAttribute("aria-pressed", String(executive));
+  els.operationalViewBtn?.setAttribute("aria-pressed", String(!executive));
 
   if (executive) closeDrawer();
 }
@@ -991,24 +1058,25 @@ function setApiState(status) {
 }
 
 function updateApiTimestamps() {
-  const text = state.apiUpdatedAt || "Atualizado agora";
-  els.apiUpdatedAt.textContent = text;
-  els.footerUpdatedAt.textContent = `Atualização da API: ${text}`;
+  if (state.apiConsultedAt) {
+    els.apiUpdatedAt.textContent = `Consulta: ${state.apiConsultedAt}`;
+    els.footerUpdatedAt.textContent = `Consulta à API: ${state.apiConsultedAt}. Consolidação da base: ${state.apiUpdatedAt || "data não informada"}.`;
+  } else {
+    const text = state.apiUpdatedAt || "não informado";
+    els.apiUpdatedAt.textContent = `Horário da API: ${text}`;
+    els.footerUpdatedAt.textContent = `Horário informado pela API: ${text}. Data de consolidação da base não confirmada.`;
+  }
 }
 
 function renderApiError(error) {
-  state.rawData = [];
-  state.filteredData = [];
-
-  renderAll();
-
-  els.attentionList.innerHTML = `
-    <div class="empty-state">
-      <span style="color:#dc2626;background:#fef2f2">!</span>
-      <strong>Não foi possível carregar a API</strong>
-      <p>${escapeHtml(error.message)}</p>
-    </div>
-  `;
+  closeDrawer();
+  els.dataNotice.hidden = false;
+  els.dataNotice.textContent = `${state.loaded ? "Falha na atualização. Exibindo os últimos dados carregados; podem estar desatualizados." : "Não foi possível carregar dados. Indicadores indisponíveis."} ${error.message}`;
+  if (!state.loaded) {
+    [els.kpiClasses, els.kpiAverage, els.kpiPeak, els.kpiOnTime, els.kpiCoverage, els.kpiIssues].forEach(el => el.textContent = "—");
+    els.attentionList.innerHTML = `<div class="empty-state"><strong>Dados indisponíveis</strong><p>Tente atualizar novamente.</p></div>`;
+    els.tableBody.innerHTML = `<tr><td colspan="11">Dados indisponíveis. Tente atualizar novamente.</td></tr>`;
+  }
 }
 
 function statusPill(item) {
@@ -1052,12 +1120,14 @@ function statusColor(type) {
 }
 
 function coverageColor(value, alpha = 1) {
+  if (value === null || value > 100) return `rgba(100, 116, 139, ${alpha})`;
   if (value >= 90) return `rgba(34, 197, 94, ${alpha})`;
   if (value >= 75) return `rgba(245, 158, 11, ${alpha})`;
   return `rgba(239, 68, 68, ${alpha})`;
 }
 
 function coverageGradient(value) {
+  if (value === null || value > 100) return "#64748b";
   if (value >= 90) return "linear-gradient(90deg,#15803d,#22c55e)";
   if (value >= 75) return "linear-gradient(90deg,#d97706,#f59e0b)";
   return "linear-gradient(90deg,#dc2626,#ef4444)";
@@ -1079,10 +1149,13 @@ function compareBy(key, direction) {
     let bv = b[key];
 
     if (["inicio", "fim", "inicioGravacao", "fimGravacao"].includes(key)) {
-      av = toDate(av)?.getTime() || 0;
-      bv = toDate(bv)?.getTime() || 0;
+      av = toDate(av)?.getTime() ?? null;
+      bv = toDate(bv)?.getTime() ?? null;
     }
 
+    if (key === "cobertura") { av = recordingRatio(a); bv = recordingRatio(b); }
+    if (av === null || av === "") return bv === null || bv === "" ? 0 : 1;
+    if (bv === null || bv === "") return -1;
     if (typeof av === "number" || typeof bv === "number") {
       return (safeNumber(av) - safeNumber(bv)) * modifier;
     }
@@ -1145,6 +1218,7 @@ function formatDateTime(value) {
   if (!date) return "—";
 
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     dateStyle: "short",
     timeStyle: "short"
   }).format(date);
@@ -1155,6 +1229,7 @@ function formatShortDate(value) {
   if (!date) return "—";
 
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric"
@@ -1166,6 +1241,7 @@ function formatTime(value) {
   if (!date) return "—";
 
   return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
@@ -1178,12 +1254,14 @@ function formatTimeRange(start, end) {
 }
 
 function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: 0
   }).format(safeNumber(value));
 }
 
 function formatDecimal(value, decimals = 1) {
+  if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("pt-BR", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
@@ -1191,21 +1269,16 @@ function formatDecimal(value, decimals = 1) {
 }
 
 function formatPercent(value) {
-  return `${formatDecimal(value, 1)}%`;
+  return value === null || value === undefined ? "—" : `${formatDecimal(value, 1)}%`;
 }
 
 function formatMinutes(value) {
-  const n = safeNumber(value);
-  return `${formatNumber(n)} min`;
+  return value === null || value === undefined ? "—" : `${formatDecimal(value, 0)} min`;
 }
 
 function safeNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-function sum(items, getter) {
-  return items.reduce((acc, item) => acc + safeNumber(getter(item)), 0);
 }
 
 function truncate(text, size) {

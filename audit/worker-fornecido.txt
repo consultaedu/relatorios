@@ -1,0 +1,225 @@
+const APPS_SCRIPT_URL =
+  "[https://script.google.com/macros/s/AKfycbyhnrNA_Ubtb33LM6qCi16HjVJewfOM3PWXAZI61aZVotm53MNMuX9DjD97cI53NtEEVg/exec](https://script.google.com/macros/s/AKfycbyhnrNA_Ubtb33LM6qCi16HjVJewfOM3PWXAZI61aZVotm53MNMuX9DjD97cI53NtEEVg/exec)";
+
+
+export default {
+
+  async fetch(request, env, ctx) {
+
+    const origem = request.headers.get("Origin") || "\*";
+
+
+    */\* ================================================*
+*&#xA0;      CORS*
+*&#xA0;   ================================================= \*/*
+
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": origem,
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400"
+    };
+
+
+    if (request.method === "OPTIONS") {
+
+      return new Response(
+        null,
+        {
+          status: 204,
+          headers: corsHeaders
+        }
+      );
+
+    }
+
+
+    if (request.method !== "GET") {
+
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          erro: "Método não permitido"
+        }),
+        {
+          status: 405,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json; charset=utf-8"
+          }
+        }
+      );
+
+    }
+
+
+    try {
+
+      */\* ================================================*
+*&#xA0;        COPIA OS FILTROS RECEBIDOS*
+*&#xA0;     ================================================= \*/*
+
+      const entrada =
+        new URL(request.url);
+
+
+      const destino =
+        new URL(APPS_SCRIPT_URL);
+
+
+      entrada.searchParams.forEach(
+        (valor, chave) => {
+
+          destino.searchParams.set(
+            chave,
+            valor
+          );
+
+        }
+      );
+
+
+      */\* ================================================*
+*&#xA0;        CACHE*
+*&#xA0;        30 segundos*
+*&#xA0;     ================================================= \*/*
+
+      const cache =
+        caches.default;
+
+
+      const cacheKey =
+        new Request(
+          destino.toString(),
+          {
+            method: "GET"
+          }
+        );
+
+
+      let resposta =
+        await cache.match(
+          cacheKey
+        );
+
+
+      if (!resposta) {
+
+        const origemResposta =
+          await fetch(
+            destino.toString(),
+            {
+              method: "GET",
+              redirect: "follow"
+            }
+          );
+
+
+        const texto =
+          await origemResposta.text();
+
+
+        resposta =
+          new Response(
+            texto,
+            {
+              status:
+                origemResposta.status,
+
+              headers: {
+                "Content-Type":
+                  "application/json; charset=utf-8",
+
+                "Cache-Control":
+                  "public, max-age=30"
+              }
+            }
+          );
+
+
+        if (
+          origemResposta.ok
+        ) {
+
+          ctx.waitUntil(
+            cache.put(
+              cacheKey,
+              resposta.clone()
+            )
+          );
+
+        }
+
+      }
+
+
+      */\* ================================================*
+*&#xA0;        RESPOSTA PARA O SITE*
+*&#xA0;     ================================================= \*/*
+
+      const headers =
+        new Headers(
+          resposta.headers
+        );
+
+
+      Object.entries(
+        corsHeaders
+      ).forEach(
+        ([chave, valor]) => {
+
+          headers.set(
+            chave,
+            valor
+          );
+
+        }
+      );
+
+
+      return new Response(
+        resposta.body,
+        {
+          status:
+            resposta.status,
+
+          headers:
+            headers
+        }
+      );
+
+    }
+
+    catch (erro) {
+
+      return new Response(
+        JSON.stringify({
+
+          ok: false,
+
+          erro:
+            erro.message
+
+        }),
+        {
+          status: 500,
+
+          headers: {
+
+            ...corsHeaders,
+
+            "Content-Type":
+              "application/json; charset=utf-8"
+
+          }
+        }
+      );
+
+    }
+
+  }
+
+};
+
+
+

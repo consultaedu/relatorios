@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 :root {
   --bg: #f4f7fb;
   --surface: #ffffff;
@@ -9,7 +7,7 @@
   --border-strong: #cbd5e1;
   --text: #0f172a;
   --muted: #64748b;
-  --muted-2: #94a3b8;
+  --muted-2: #64748b;
   --primary: #16a34a;
   --primary-soft: #ecfdf3;
   --success: #16a34a;
@@ -1357,7 +1355,7 @@ body.executive-mode .operational-only {
   display: none !important;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1440px) {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1586,4 +1584,42 @@ body.executive-mode .operational-only {
   .cell-title {
     max-width: 160px;
   }
+}
+
+/* Ajustes da auditoria: teclado, dados incompletos e impressão integral. */
+:focus-visible { outline: 3px solid #15803d; outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link { position: fixed; top: -80px; left: 12px; z-index: 150; padding: 12px; background: white; color: #14532d; }
+.skip-link:focus { top: 10px; }
+.data-notice { background: #fffbeb; color: #854d0e; border: 1px solid #fcd34d; padding: 12px 16px; border-radius: 10px; }
+[hidden] { display: none !important; }
+.recording-value { font-size: clamp(19px, 2vw, 25px); line-height: 1.35; overflow-wrap: anywhere; }
+.recording-note { margin-top: 6px; color: #475569; font-size: 11px; }
+.table-caption { caption-side: top; padding: 12px 16px; text-align: left; color: #475569; font-size: 12px; white-space: normal; }
+.print-only { display: none; }
+.drawer-open { overflow: hidden; }
+.details-drawer:not(.open) { visibility: hidden; }
+.details-drawer { height: 100dvh; }
+.topbar-actions { flex-wrap: wrap; }
+.filter-field, .kpi-card, .chart-panel, .attention-card { min-width: 0; }
+@media (max-width: 680px) {
+  .table-tools { flex-wrap: wrap; }
+  .search-box { min-width: 0; }
+  .topbar-title h1 { overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}
+@media print {
+  .print-only { display: block; color: #334155; }
+  body.executive-mode .operational-section { display: block !important; }
+  .data-notice { color: #854d0e; }
+  #detalhamento { break-inside: auto; }
+  thead { display: table-header-group; }
+  tr, .kpi-card, .chart-panel, .attention-card { break-inside: avoid; }
+  .table-scroll table { min-width: 0; width: 100%; table-layout: fixed; }
+  th, td { overflow-wrap: anywhere; white-space: normal; }
+  .cell-title { white-space: normal; overflow: visible; text-overflow: clip; }
+  .recording-value { font-size: 16px; }
+  .recording-note { font-size: 9px; }
 }
